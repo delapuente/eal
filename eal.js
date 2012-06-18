@@ -1,53 +1,7 @@
 'use strict';
 
-const eal = {};
+var eal = {};
 (function () {
-
-/*
- * Surface EAL provides basic surface events:
- *  touch, pressarea, longpress, keeppressing, tap, doubletap, enterarea, leavearea, release, changearea
- *
- * Surfaces are compound by areas. When constructing a surface you can optionally pass 
- * a function that receives the target of the event and must return the area for that 
- * target or null if it is not an area. By default, it returns the target element itself.
- *
- * Events:
- * -------
- *  * __touch__ event is triggered when the surface is pressed for the first time
- *  * __pressarea__ event is triggered just after entering a new area (see __enterarea__ event)
- *  * __longpress__ (optional) event is triggered when (and only once) the same area is touch during more than longPressDelay
- *  * __keeppressing__ (optional) event is triggered when keeping pressing the same area in intervals of keepPressingInterval
- *  * __tap__ event is triggered when an area is touch and the surface is released without changing the area
- *  * __doubletap__ event is triggered when an area is touch for a second time before doubleTapTimeout
- *  * __enterarea__ event is triggered when entering a new area
- *  * __leavearea__ event is triggered when leaving an area
- *  * __release__ event is triggered when surface is release
- *  * __changearea__ event is triggered when changing the area
- *
- * Usual flows:
- * ------------
- * Take in count some interaction canr trigger more than one event. Here are some examples:
- * (Imagine a QWERTY keyboard)
- *  1- The user tap W:
- *  __touch__, __enterarea__, __press__, __leavearea__, __release__, __tap__
- *  2- The user tap and hold W, then release:
- *  __touch__, __enterarea__, __press__, __longPress__, __leavearea__, __release__, __tap__
- *  3- The user press I, then corrects and moves to U, then release:
- *  __touch__, __enterarea__, __press__, __leavearea__, __enterarea__, __press__, __leavearea__, __release__, __tap__
- *  4- The user press I, then corrects and moves and holds U:
- *  __touch__, __enterarea__, __press__, __leavearea__, __enterarea__, __press__, __longPress__
- *  5- The user release the surface
- *  __leavearea__, __release__, [__tap__ | __doubleTap__]
- *
- *  NOTE __press__ is always triggered after __enterarea__, it is intended to be this way. It is sintactic sugar
- *
- * How to use this:
- * ----------------
- * First convert yout HTML element into a surface. Now take in count every
- * compounding element capturing pointer events is an area.
- *
- * Then attach general callbacks to each event or specific events by area.
- */
 
 var _debugBasicEvents = false;
 
@@ -94,6 +48,7 @@ var _defaults = {
 eal.Surface = function(surfaceElement, spec) {
 
   var _longPressTimer, _doubleTapTimer, _keepPressingInterval;
+  var _isPressing = false;
   var _isWaitingForSecondTap = false;
   var _hasMoved;
   var _accessArea, _currentArea, _formerArea;
@@ -117,6 +72,7 @@ eal.Surface = function(surfaceElement, spec) {
   }
 
   function _reset() {
+    _isPressing = false;
     _hasMoved = false;
   }
 
@@ -213,6 +169,7 @@ eal.Surface = function(surfaceElement, spec) {
   function _onMouseDown(evt) {
     _debugBasicEvents && console.log('--> mousedown');
 
+    _isPressing = true;
     var abstractEvts = [_newEvent(evt, 'touchsurface')];
     var newArea = _options.isArea(evt);
     if (newArea) {
@@ -252,7 +209,7 @@ eal.Surface = function(surfaceElement, spec) {
     // ignore moving when not transitioning to another area
     // (leaving to a dead zone or remain in the same area)
     var newArea = _options.isArea(evt);
-    if (!newArea || _currentArea === newArea)
+    if (!_isPressing || !newArea || _currentArea === newArea)
       return;
 
     _hasMoved = true;

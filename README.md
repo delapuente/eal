@@ -11,7 +11,7 @@ includes the **surface controller** to control touchable surfaces.
 
 The `eal.surface` controller provides basic surface events:
 
- * touch
+ * touchsurface
  * pressarea
  * longpress
  * keeppressing
@@ -19,7 +19,7 @@ The `eal.surface` controller provides basic surface events:
  * doubletap
  * enterarea
  * leavearea
- * release
+ * releasesurface
  * changearea
 
 Surfaces are compound by (abstract) areas. When constructing a surface you can
@@ -29,7 +29,7 @@ the target element itself.
 
 ## Events:
 
- * `touch` event is triggered when the surface is pressed for the first time
+ * `touchsurface` event is triggered when the surface is pressed for the first time
  * `pressarea` event is triggered just after entering a new area (see `enterarea`
    event)
  * `longpress` (optional) event is triggered when (and only once) the same area
@@ -42,7 +42,7 @@ the target element itself.
    `doubleTapTimeout`
  * `enterarea` event is triggered when entering a new area
  * `leavearea` event is triggered when leaving an area
- * `release` event is triggered when surface is release
+ * `releasesurface` event is triggered when surface is release
  * `changearea` event is triggered when changing the area
 
 ## Typical flow examples
@@ -87,7 +87,7 @@ var surface = document.getElementById('surfaceElement');
 var _surface = new eal.Surface(
   surface,
   {
-    getArea: function (evt) { 
+    isArea: function (evt) { 
       // return an area or `null`
     },
     longPressDelay: 700,        // milliseconds
@@ -101,13 +101,17 @@ surface.addEventListener('doubletap', callback);
 
 The contructor accepts the element that will be the surface and some options:
 
- * `getArea` this function determine which area has been pressed. If no provided
+ * `isArea` this function determine which area has been pressed. If no provided
    each area is the last interactive HTML node inside the surface element if any
    or simply the deepest node in the HTML hierarchy.
  * `longPressDelay` the amount of millisecons that have to pass in order to 
    register a long press.
  * `doubleTapTimeout` the amount of limit millisecons to trigger a double tap.
  * `keepPressingInterval` the interval between `keeppressing` events.
+
+### Examples
+
+Check the file `example.html` to test with a simple demo.
 
 ### Listeners
 

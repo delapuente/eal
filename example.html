@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script type="text/javascript" src="eal.js"></script>
+    <style type="text/css">
+      #logger {
+        height:200px;
+        overflow:scroll;
+      }
+    </style>
+  </head>
+  <body>
+    <p>Try these actions:</p>
+    <ul>
+      <li>Tap a button.</li>
+      <li>Press a button and keep pressing.</li>
+      <li>Double tap a button.</li>
+      <li>Press one button and (without releasing), press another one.</li>
+    </ul>
+    <div id="surface">
+      <button id="A">A</button>
+      <button id="B">B</button>
+      <button id="C">C</button>
+    </div>
+    <div id="logger"></div>
+
+    <script type="text/javascript">
+      var srf = document.getElementById('surface');
+      var srfController = eal.Surface(srf, {
+        isArea: function(evt) {
+          // only recognizes buttons as valid areas
+          return evt.target.tagName === 'BUTTON' ? evt.target.id : null;
+        }
+      });
+      var logger = document.getElementById('logger');
+
+      function logText(text) {
+        var p = document.createElement('p');
+        p.innerHTML = text;
+        logger.appendChild(p);
+        p.scrollIntoView();
+      }
+
+      srf.addEventListener('touchsurface', function() {
+        logText('Touching surface')
+      });
+
+      srf.addEventListener('releasesurface', function() {
+        logText('Leaving surface')
+      });
+
+      srf.addEventListener('enterarea', function(evt) {
+        logText('Entering area: '+evt.detail.area);
+      });
+
+      srf.addEventListener('leavearea', function(evt) {
+        logText('Leaving area: '+evt.detail.area);
+      });
+
+      srf.addEventListener('tap', function(evt) {
+        logText('Tap on area: '+evt.detail.area);
+      });
+
+      srf.addEventListener('doubletap', function(evt) {
+        logText('Double tap on area: '+evt.detail.area);
+      });
+
+      srf.addEventListener('press', function(evt) {
+        logText('Press on area: '+evt.detail.area);
+      });
+
+      srf.addEventListener('longpress', function(evt) {
+        logText('Long press on area: '+evt.detail.area);
+      });
+
+      srf.addEventListener('keeppressing', function(evt) {
+        logText('Keeping pressed area: '+evt.detail.area);
+      });
+
+      srf.addEventListener('changearea', function(evt) {
+        logText('Changed from area '+evt.detail.area+' to '+evt.detail.fromArea);
+      });
+    </script>
+  </body>
+</html>
