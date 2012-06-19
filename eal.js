@@ -21,16 +21,16 @@ function logEvent(evt) {
   switch (evt.type) {
     case 'touchsurface':
     case 'releasesurface':
-      console.log('['+evt.detail.id+']: '+evt.type);
+      console.log('['+evt.detail.track+']: '+evt.type);
     break;
 
     case 'changearea':
-      console.log('['+evt.detail.id+']: '+evt.type+': from '+
+      console.log('['+evt.detail.track+']: '+evt.type+': from '+
                    evt.detail.fromArea+' to '+evt.detail.area);
     break;
 
     default:
-      console.log('['+evt.detail.id+']: '+evt.type+': '+evt.detail.area);
+      console.log('['+evt.detail.track+']: '+evt.type+': '+evt.detail.area);
     break;
   }
 }
