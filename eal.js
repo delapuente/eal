@@ -3,7 +3,8 @@
 var eal = {};
 (function () {
 
-var _debugBasicEvents = false;
+var _debugBasicEvents = false; // for the underlying events
+var _debugEvents = true; // for the events dispatched by the controller
 
 function extend(base) {
   var current, i, prop;
@@ -20,50 +21,60 @@ function logEvent(evt) {
   switch (evt.type) {
     case 'touchsurface':
     case 'releasesurface':
-      console.log(evt.type);
+      console.log('['+evt.detail.id+']: '+evt.type);
     break;
 
     case 'changearea':
-      console.log(evt.type+': from '+evt.detail.fromArea+' to '+evt.detail.area);
+      console.log('['+evt.detail.id+']: '+evt.type+': from '+
+                   evt.detail.fromArea+' to '+evt.detail.area);
     break;
 
     default:
-      console.log(evt.type+': '+evt.detail.area);
+      console.log('['+evt.detail.id+']: '+evt.type+': '+evt.detail.area);
     break;
   }
 }
 
-function _defaultIsArea(htmlElement) {
-  return htmlElement;
+function _defaultIsArea(evt) {
+  return evt.target;
+}
+
+function _defaultMultitouchIsArea(evt) {
+    var touch = evt.changedTouches[0];
+    var element = document.elementFromPoint(touch.screenX, touch.screenY);
+    return element;
 }
 
 var _defaults = {
   longPressDelay: 700,
   doubleTapTimeout: 700,
   keepPressingInterval: 100,
+  multitouch: false,
 
-  getArea: _defaultIsArea,
+  isArea: null,
 };
 
 eal.Surface = function(surfaceElement, spec) {
 
-  var _longPressTimer, _doubleTapTimer, _keepPressingInterval;
-  var _isPressing = false;
-  var _isWaitingForSecondTap = false;
-  var _hasMoved;
-  var _accessArea, _currentArea, _formerArea;
-  var _enterarea; // enterarea and leavearea behave as parenthesis. The second can not exist without the previous one.
+  var _longPressTimer = {}, _doubleTapTimer = {}, _keepPressingInterval = {};
+  var _touchId = {};
+  var _isWaitingForSecondTap = {};
+  var _hasMoved = {};
+  var _accessArea = {}, _currentArea = {}, _formerArea = {};
+  var _enterarea = {}; // enterarea and leavearea behave as parenthesis. 
+                       // The second can not exist without the previous one.
   var _options;
 
-  function _newEvent(base, type, area, from) {
+  function _newEvent(track, base, type, area, from) {
     var newEvent = new CustomEvent(type, {
       bubbles: true,
       cancelable: true,
       detail: {
+        track: track,
         target: base.detail.target || base.target,
         area: area || base.detail.area || null,
-        moved: _hasMoved || base.detail.moved || false,
-        accessArea: _accessArea,
+        moved: _hasMoved[track] || base.detail.moved || false,
+        accessArea: _accessArea[track],
         fromArea: from || null
       }
     });
@@ -71,65 +82,67 @@ eal.Surface = function(surfaceElement, spec) {
     return newEvent;
   }
 
-  function _reset() {
-    _isPressing = false;
-    _hasMoved = false;
+  function _reset(track) {
+    _touchId[track] = false;
+    _hasMoved[track] = false;
   }
 
   // some events generate other events
-  function _addSynteticEvents(evts) {
+  function _addSynteticEvents(track, evts) {
     var newEvt, evt, type, readyToTap = false;
     for (var i = 0; evt = evts[i]; i += 1) {
       newEvt = null;
       switch (evt.type) {
         case 'enterarea':
           // enter area generate press
-          newEvt = _newEvent(evt, 'pressarea');
+          newEvt = _newEvent(track, evt, 'pressarea');
         break;
 
         case 'leavearea':
           // interrumpt long press and keep pressing
-          window.clearTimeout(_longPressTimer);
-          window.clearInterval(_keepPressingInterval);
+          window.clearTimeout(_longPressTimer[track]);
+          window.clearInterval(_keepPressingInterval[track]);
           readyToTap = true;
         break;
 
         case 'releasesurface':
           // release, if in area, generates a tap
-          if (_currentArea && readyToTap) {
+          if (_currentArea[track] && readyToTap) {
 
             // waiting for second tap -> generate the double tap
-            if (_isWaitingForSecondTap && _currentArea === _formerArea) {
-              newEvt = _newEvent(evt, 'doubletap', _currentArea);
+            if (_isWaitingForSecondTap[track] && 
+                _currentArea[track] === _formerArea[track]) {
 
-              _isWaitingForSecondTap = false;
+              newEvt = _newEvent(track, evt, 'doubletap', _currentArea[track]);
+              _isWaitingForSecondTap[track] = false;
 
-            // not waiting -> generates a tap and now waiting no more than doubleTapTimeout
+            // not waiting -> generates a tap and now waiting no more than
+            // doubleTapTimeout
             } else {
-              newEvt = _newEvent(evt, 'tap', _currentArea);
+              newEvt = _newEvent(track, evt, 'tap', _currentArea[track]);
 
-              _isWaitingForSecondTap = true;
-              window.clearTimeout(_doubleTapTimer);
-              _doubleTapTimer = window.setTimeout(
-                function () { _isWaitingForSecondTap = false; },
+              _isWaitingForSecondTap[track] = true;
+              window.clearTimeout(_doubleTapTimer[track]);
+              _doubleTapTimer[track] = window.setTimeout(
+                function () { _isWaitingForSecondTap[track] = false; },
                 _options.doubleTapTimeout
               );
             }
           }
 
           // interrumpt long press and keep pressing
-          window.clearTimeout(_longPressTimer);
-          window.clearInterval(_keepPressingInterval);
+          window.clearTimeout(_longPressTimer[track]);
+          window.clearInterval(_keepPressingInterval[track]);
         break;
 
         case 'pressarea':
           // set timeout up for long press
           if (_options.longPressDelay) {
-            var longPress = _newEvent(evt, 'longpress');
-            window.clearTimeout(_longPressTimer);
-            _longPressTimer = window.setTimeout(
+            var longPress = _newEvent(track, evt, 'longpress');
+            window.clearTimeout(_longPressTimer[track]);
+            _longPressTimer[track] = window.setTimeout(
               function () {
-                _handleAbstractEvents([longPress]);
+                _handleAbstractEvents(track, [longPress]);
               },
               _options.longPressDelay
             );
@@ -139,10 +152,10 @@ eal.Surface = function(surfaceElement, spec) {
         case 'longpress':
           // set interval for keep pressing
           if (_options.keepPressingInterval) {
-            var keepPressing = _newEvent(evt, 'keeppressing');
-            _keepPressingInterval = window.setInterval(
+            var keepPressing = _newEvent(track, evt, 'keeppressing');
+            _keepPressingInterval[track] = window.setInterval(
               function () {
-                _handleAbstractEvents([keepPressing]);
+                _handleAbstractEvents(track, [keepPressing]);
               },
               _options.keepPressingInterval
             );
@@ -156,93 +169,122 @@ eal.Surface = function(surfaceElement, spec) {
     }
   }
 
-  function _handleAbstractEvents(evts) {
+  function _handleAbstractEvents(track, evts) {
     var fn;
-    _addSynteticEvents(evts);   // improve performance by adding this to the loop
+    _addSynteticEvents(track, evts);   // improve performance by adding this
+                                       // to the loop
     for (var i = 0, evt; evt = evts[i]; i += 1) {
       // event callback
       evt.detail.target.dispatchEvent(evt);
-      logEvent(evt);
+      _debugEvents && logEvent(evt);
     }
+  }
+
+  function _getTouchId(evt) {
+    return _options.multitouch ?
+            evt.changedTouches[0].identifier :
+            0;
   }
 
   function _onMouseDown(evt) {
     _debugBasicEvents && console.log('--> mousedown');
 
-    _isPressing = true;
-    var abstractEvts = [_newEvent(evt, 'touchsurface')];
-    var newArea = _options.isArea(evt);
+    evt.preventDefault();
+    var track = _getTouchId(evt);
+
+    var abstractEvts = [_newEvent(track, evt, 'touchsurface')];
+    var newArea = _options.isArea(evt, track);
     if (newArea) {
-      _formerArea = _currentArea;
-      _accessArea = _currentArea = newArea;
+      _formerArea[track] = _currentArea[track];
+      _accessArea[track] = _currentArea[track] = newArea;
       abstractEvts.push(
-        _newEvent(evt, 'enterarea', _currentArea)
+        _newEvent(track, evt, 'enterarea', _currentArea[track])
       );
-      _enterarea = _currentArea;
+      _enterarea[track] = _currentArea[track];
     }
 
-    _handleAbstractEvents(abstractEvts, evt);
+    _handleAbstractEvents(track, abstractEvts, evt);
   }
 
   function _onMouseLeave(evt) {
     _debugBasicEvents && console.log('--> mouseleave');
 
+    evt.preventDefault();
+    var track = _getTouchId(evt);
+
     var abstractEvts = [];
-    if (_currentArea && _enterarea) {
+    if (_currentArea[track] && _enterarea[track]) {
       abstractEvts.push(
-        _newEvent(evt, 'leavearea', _currentArea)
+        _newEvent(track, evt, 'leavearea', _currentArea[track])
       );
-      _enterarea = null;
+      _enterarea[track] = null;
     }
 
     abstractEvts.push(
-      _newEvent(evt, 'releasesurface')
+      _newEvent(track, evt, 'releasesurface')
     );
 
-    _handleAbstractEvents(abstractEvts, evt);
-    _reset();
+    _handleAbstractEvents(track, abstractEvts, evt);
+    _reset(track);
   }
 
   function _onMouseMove(evt) {
     _debugBasicEvents && console.log('--> mousemove');
 
+    evt.preventDefault();
+    var track = _getTouchId(evt);
+
     // ignore moving when not transitioning to another area
     // (leaving to a dead zone or remain in the same area)
-    var newArea = _options.isArea(evt);
-    if (!_isPressing || !newArea || _currentArea === newArea)
+    var newArea = _options.isArea(evt, track);
+    if (!newArea || _currentArea[track] === newArea)
       return;
 
-    _hasMoved = true;
+    _hasMoved[track] = true;
     var abstractEvts = [];
-    if (_enterarea) {
-      abstractEvts.push(_newEvent(evt, 'leavearea', _currentArea));
-      _enterarea = null; // next assign override this
+    if (_enterarea[track]) {
+      abstractEvts.push(_newEvent(
+        track, evt, 'leavearea',
+        _currentArea[track])
+      );
+      _enterarea[track] = null; // next assign override this
     }
-    if (_currentArea) {
-      abstractEvts.push(_newEvent(evt, 'changearea', newArea, _currentArea));
+    if (_currentArea[track]) {
+      abstractEvts.push(_newEvent(
+        track, evt, 'changearea',
+        newArea, _currentArea[track])
+      );
     }
-    abstractEvts.push(_newEvent(evt, 'enterarea', newArea));
-    _enterarea = newArea;
+    abstractEvts.push(_newEvent(track, evt, 'enterarea', newArea));
+    _enterarea[track] = newArea;
 
-    _formerArea = _currentArea;
-    _currentArea = newArea;
-    _handleAbstractEvents(abstractEvts);
+    _formerArea[track] = _currentArea[track];
+    _currentArea[track] = newArea;
+    _handleAbstractEvents(track, abstractEvts);
   }
 
   spec = spec || {};
   _options = extend({}, _defaults, spec);
-  surfaceElement.addEventListener('mousedown', _onMouseDown);
-  surfaceElement.addEventListener('mouseup', _onMouseLeave);
-  surfaceElement.addEventListener('mousemove', _onMouseMove);
-  surfaceElement.addEventListener('mouseleave', _onMouseLeave);
+  if (!_options.isArea)
+    _options.isArea = _options.multitouch ?
+                      _defaultMultitouchIsArea :
+                      _defaultIsArea;
+
+  if (_options.multitouch) {
+    surfaceElement.addEventListener('touchstart', _onMouseDown);
+    surfaceElement.addEventListener('touchmove', _onMouseMove);
+    surfaceElement.addEventListener('touchend', _onMouseLeave);
+  } else {
+    surfaceElement.addEventListener('mousedown', _onMouseDown);
+    surfaceElement.addEventListener('mouseup', _onMouseLeave);
+    surfaceElement.addEventListener('mousemove', _onMouseMove);
+    surfaceElement.addEventListener('mouseleave', _onMouseLeave);
+  }
 
   // set options
   this.set = function(newSpec) {
     extend(_options, newSpec);
   }
-
-  _hasMoved = false;
-  _currentArea = _accessArea = _formerArea = null;
 }
 
 })();

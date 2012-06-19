@@ -1,7 +1,7 @@
 # EAL: Event Abstraction Layer
 
 EAL is a JS library that push efforts in to provide high level events based on 
-other lower level events.
+other lower **underlying level** events.
 
 It works by attaching **controllers** to HTML elements. A controller is in
 charge of receive basic events and build higher level events. Current version
@@ -9,7 +9,7 @@ includes the **surface controller** to control touchable surfaces.
 
 # Surface controller
 
-The `eal.surface` controller provides basic surface events:
+The `eal.surface` controller supports mulittouch and provides basic surface events:
 
  * touchsurface
  * pressarea
@@ -78,7 +78,23 @@ examples (imagine a QWERTY keyboard):
     __leavearea__, __release__, optionally produces a __tap__ or __doubletap__
 
 **NOTE**: `press` is always triggered after `enterarea`, it is intended to be
-this way. It is sintactic sugar.
+this way. It is syntactic sugar.
+
+## Multitouch support
+
+You can enable multitouch support passing `multitouch: true` configuration option
+when creating the controller. Then the controller will be supported by the
+[Touch Events](https://developer.mozilla.org/en/DOM/Touch_events) feature.
+
+Each event has a property called `track`. Each **track** represents something
+touching the surface (usually a finger). When multitouch is disabled,
+`track` property is always 0.
+
+Note tracks are treated independently, so two `doubletap` can be dispatched
+(provided you are fast enough) with for two distinct tracks.
+
+The track is the [identifier](https://developer.mozilla.org/en/DOM/Touch.identifier)
+provided by the [Touch](https://developer.mozilla.org/en/DOM/Touch) interface.
 
 ## How to use it:
 
@@ -87,12 +103,13 @@ var surface = document.getElementById('surfaceElement');
 var _surface = new eal.Surface(
   surface,
   {
-    isArea: function (evt) { 
+    isArea: function (evt, track) { 
       // return an area or `null`
     },
     longPressDelay: 700,        // milliseconds
     doubleTapTimeout: 700,
     keepPressingInterval: 100,
+    multitouch: true
   }
 );
 
@@ -109,14 +126,43 @@ The contructor accepts the element that will be the surface and some options:
  * `doubleTapTimeout` the amount of limit millisecons to trigger a double tap.
  * `keepPressingInterval` the interval between `keeppressing` events.
 
+**MULTITOUCH NOTE**: when multitouch is `true`, the `isArea` event received
+as `evt` is the same as the event received by the touch event underlying.
+According to the specification, the [target of the event is the same as that
+received by the `touchstart` event]
+(https://developer.mozilla.org/en/DOM/TouchEvent#touchmove). Just be careful!
+
+### isArea examples
+
+Here are the two default implementations for `isArea` in order to provide some
+inspiration:
+
+**multitouch is `false`**
+
+```javascript
+function _defaultIsArea(evt) {
+  return evt.target;
+}
+```
+
+**multitouch is `true`**
+
+```javascript
+function _defaultMultitouchIsArea(evt) {
+  var touch = evt.changedTouches[0];
+  var element = document.elementFromPoint(touch.screenX, touch.screenY);
+  return element;
+}
+```
+
 ### Examples
 
-Check the file `example.html` to test with a simple demo.
+Check the file `example.html` to test with a simple (no multitouch) demo.
 
 ### Listeners
 
 Listeners receive a custom event object as first parameter. Its target is the 
-node element that actually received the lower level event. You can inspect
+node element that actually received the underlying event. You can inspect
 `detail` property looking for more interesting info:
 
  * `area` the area recieving the event as it was returned by the `getArea`
@@ -124,3 +170,4 @@ node element that actually received the lower level event. You can inspect
  * `fromArea` in case of movement, the previous area.
  * `moved` true if some area switching was detected.
  * `accessArea` the area where the surface was touched at the first time.
+ * `track` the identifier for the track (see above) where the event is taking place.
